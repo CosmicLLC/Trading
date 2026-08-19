@@ -68,6 +68,7 @@ print(f"Sampled {len(candidates_by_date)} dates, {total_candidates} low-float ca
 
 # --- CELL 3: Pull minute bars with extended (pre-market) hours for each candidate ---
 RVOL_LOOKBACK_DAYS = 20  # trailing average window, parameter
+FADE_LOOKAHEAD_MINUTES = 30  # must match phase1_analysis.py's FADE_LOOKAHEAD_MINUTES -- keep these in sync
 
 def get_gap_data(symbol, event_date):
     """
@@ -131,6 +132,22 @@ def get_gap_data(symbol, event_date):
     else:
         atr_normalized_gap = np.nan
 
+    # price_after_lookahead: regular-session price FADE_LOOKAHEAD_MINUTES after the
+    # 9:30 ET open. This is what phase1_analysis.py's compute_outcome_label() needs
+    # to decide fade (price back below premarket_low) vs. continuation. Uses the
+    # first regular-session bar at or after the lookahead cutoff, not an exact-minute
+    # match, in case of missing bars (halts, thin trading).
+    regular_session = event_day[event_day['time'].dt.hour >= 9]
+    if regular_session.empty:
+        price_after_lookahead = np.nan
+    else:
+        market_open = pd.Timestamp.combine(event_date.date(), pd.Timestamp("09:30").time())
+        cutoff = market_open + timedelta(minutes=FADE_LOOKAHEAD_MINUTES)
+        after_cutoff = regular_session[regular_session['time'] >= cutoff]
+        price_after_lookahead = (
+            after_cutoff.iloc[0]['close'] if not after_cutoff.empty else np.nan
+        )
+
     return {
         'symbol': str(symbol),
         'date': event_date.date(),
@@ -141,6 +158,7 @@ def get_gap_data(symbol, event_date):
         'premarket_volume': premarket_volume,
         'rvol': rvol,
         'atr_normalized_gap': atr_normalized_gap,
+        'price_after_lookahead': price_after_lookahead,
     }
 
 # --- CELL 4: Assemble results ---
@@ -172,3 +190,7 @@ df.to_csv('low_float_gap_candidates.csv', index=False)
 #    reason to loosen the float/gap thresholds.
 # 4. Once this file's output looks sane, run sec_edgar_catalyst_flag.py against it,
 #    then phase1_analysis.py for the outcome_label + statistical tests.
+# 5. price_after_lookahead (added in get_gap_data) uses FADE_LOOKAHEAD_MINUTES=30 --
+#    if you sensitivity-test a different lookahead window in phase1_analysis.py,
+#    change the constant here too and re-run the pull, since the underlying price
+#    sample is fixed at pull time, not computed at analysis time.

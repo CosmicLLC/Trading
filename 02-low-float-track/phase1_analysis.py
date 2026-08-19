@@ -30,13 +30,9 @@ def compute_outcome_label(row):
     FADE_LOOKAHEAD_MINUTES of the open after sweeping the pre-market high, else 0
     (continued). THRESHOLD IS A DOCUMENTED DEFAULT, NOT GROUND TRUTH -- sensitivity
     test by re-running with different FADE_LOOKAHEAD_MINUTES values once Phase 1
-    passes its first check.
-
-    NOTE: this placeholder assumes the upstream data pull is extended to include a
-    post-sweep price sample at FADE_LOOKAHEAD_MINUTES after the open -- that field
-    (`price_after_lookahead`) does not exist yet in quantconnect_phase1_data_pull.py
-    and must be added there before this function produces real labels. Flagging this
-    explicitly rather than fabricating a formula that silently returns garbage.
+    passes its first check. If you change this constant, also change the identical
+    FADE_LOOKAHEAD_MINUTES constant in quantconnect_phase1_data_pull.py and re-run
+    the pull -- price_after_lookahead is sampled at pull time, not computed here.
     """
     if "price_after_lookahead" not in row or pd.isna(row.get("price_after_lookahead")):
         return np.nan
